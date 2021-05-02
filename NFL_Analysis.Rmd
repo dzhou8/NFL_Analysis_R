@@ -1,0 +1,167 @@
+---
+title: "NFL_Analysis"
+output: 
+  html_document:
+    toc: true
+    theme: cosmo
+---
+
+<!-- I have no idea what below does -->
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+We're going to do some basic analysis on NFL teams from 2002-2020. This consists
+of the 16-game-per-season era.
+
+Let's import some important libraries.
+```{r imports}
+library(tidyverse)
+library(ggplot2)
+```
+
+For me, the dataset is already in the directory. You can also download it straight
+off the link
+```{r get data}
+df <- read_csv('standings.csv')
+# data <- read_csv('http://www.habitatring.com/standings.csv') # if you want the data from online
+```
+
+First, we will conduct some exploration and try to understand the dataset first.
+Then, we will explore the relationship of points. We'll explore points scored,
+points allowed, and point differential versus wins. Obviously, for individual
+games, measurements like point differential are highly correlated with wins, but
+over the average course of a season we might see different results.
+
+Note: After the analysis, it makes more sense to plot pct instead (I think
+it takes into account draws as well). Overall the graphs should still look the same.
+
+Finally, I would like to conduct a search for outliers of these statistics. For example,
+which team is the most 'clutch', that is, has the highest win rate with a low point
+differential. We could see the clutchest team in a season or the clutchest overall
+NFL team throughout the 16-game era. Alternatively, we could also explore the least
+clutch team, the "chokers". 
+
+## Data analysis
+
+Let's first get a look of what's in our data!
+```{r first look}
+head(df)
+names(df)
+summary(df)
+```
+
+There are honestly a lot of columns. For now, let's filter our data. What columns
+should we keep? season, team, wins, losses, ties, pct, scored, allowed, and net all make sense.
+Let's also keep seed, it might come in handy later.
+
+```{r filter}
+df <- select(df, c(season, team, wins, losses, ties, pct, scored, allowed, net, seed))
+head(df)
+```
+
+There are 32 teams in the NFL, and 19 years in this dataset. Let's create an aggregated
+dataset where we combine all of a teams stats.
+```{r combined dataset}
+combined_df <- df %>%
+  group_by(team) %>%
+  summarise(wins = sum(wins), losses = sum(losses), ties = sum(ties),
+            pct = mean(pct), scored = sum(scored), allowed = sum(allowed),
+            net = sum(net), seed = mean(seed))
+print(combined_df)
+```
+Note: I chose to sum up all the data, except in pct and seed, where I thought
+it would make more sense to have them be averages.
+
+Alright, now it's time to do some very basic plotting. Let's just look at scored
+vs pct in the original data.
+```{r scored vs wins original}
+ggplot(data=df, aes(x = scored, y = pct)) + geom_point()
+```
+
+Very interesting. For the most part, of course we see a direct positive correlation. 
+The more you score, the more you win, right? But what about the line on the left, which
+essentially has a bunch of super low scoring team. My hypothesis is that some of
+our data is missing, so let's go ahead and split by year.
+
+```{r scored vs wins original by year}
+ggplot(data=df, aes(x = scored, y = pct, color=factor(season))) + geom_point()
+```
+
+Okay, the colors are confusing, but I think we can clearly tell that there's something
+wrong with the data from 2020 or so. Let's plot the filtered data from 2016 onwards.
+
+```{r data from 2018+}
+df_2016_plus <- subset(df, df$season >= 2016)
+ggplot(data=df_2016_plus, aes(x = scored, y = pct, color=factor(season))) + geom_point()
+```
+
+Now it's very clear that we only have problems with 2020. Let's inspect the data.
+
+```{r data from 2020}
+df_2020 <- subset(df, df$season == 2020)
+head(df_2020)
+summary(df_2020)
+```
+
+It's clear that our data is a bit outdated and doesn't have everything in the 2020 season.
+Let's update our dataset to only include analysis from 2002-2019 for the graphs.
+Let's update the combined dataset as well. (as means may be lopsided by overweighting 2020).
+
+```{r cleaning data}
+df <- subset(df, df$season < 2020)
+combined_df <- df %>%
+  group_by(team) %>%
+  summarise(wins = sum(wins), losses = sum(losses), ties = sum(ties),
+            pct = mean(pct), scored = sum(scored), allowed = sum(allowed),
+            net = sum(net), seed = mean(seed))
+head(df) #to check
+head(combined_df) # to check
+```
+
+Now let's go ahead and plot scored, allowed, and net vs pct for our data.
+
+```{r general plots}
+ggplot(data=df, aes(x=scored, y=pct)) + geom_point(color=factor(df$season)) + geom_smooth()
+ggplot(data=df, aes(x=allowed, y=pct)) + geom_point(color=factor(df$season)) + geom_smooth()
+ggplot(data=df, aes(x=net, y=pct)) + geom_point(color=factor(df$season)) + geom_smooth()
+```
+
+Honestly, just as expected. There is a strong correlation between scored points,
+allowed points, and an extremely strong correlation for net points. Let's calculate
+the correlation exactly.
+
+```{r correlations}
+print(cor(x=df$scored, y=df$pct))
+print(cor(x=df$allowed, y=df$pct))
+print(cor(x=df$net, y=df$pct))
+```
+
+Interestingly enough, defense is not as correlated.
+There's too many dots on these graphs, and labeling would be a visual nightmare.
+Let's switch over to the combined datasets. Let's look at the generic plots before
+answering/asking any questions.
+
+<!-- It would be really nice to make all these points different colors, but idk how. -->
+```{r combined general plots}
+ggplot(data=combined_df, aes(x=scored, y=pct)) + geom_point() + geom_text(aes(label=combined_df$team))
+ggplot(data=combined_df, aes(x=allowed, y=pct)) + geom_point() + geom_text(aes(label=combined_df$team))
+ggplot(data=combined_df, aes(x=net, y=pct)) + geom_point() + geom_text(aes(label=combined_df$team))
+```
+
+The data doesn't look that linear/correlated. It seems to be a problem with LAC and LA. Maybe they are new teams?
+TODO: blah blah NE is too good, CLE sucks
+TODO: correlation, correlation graph
+TODO (?): clutch factor
+
+## Conclusion
+
+TODO
+
+## Session Info
+```{r session info}
+sessionInfo()
+```
+
