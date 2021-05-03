@@ -1,0 +1,159 @@
+---
+title: "NFL_Analysis"
+output: 
+  html_document:
+    toc: true
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+We're going to do some basic analysis on NFL teams from 2002-2020. This consists
+of the 16-game-per-season era since the league has had 32 teams.
+
+Let's import some important libraries.
+```{r imports}
+library(tidyverse)
+library(ggplot2)
+```
+
+The dataset was built up in Google Sheets from "nfl.com/standings" (link to the
+sheet will be attached below). It was then downloaded as a TSV and imported
+using the handy read_tsv function (make sure to set the correct working directory!).
+
+Link to the sheet to download dataset:
+https://docs.google.com/spreadsheets/d/1mVI7F5M91gVVnUujeiHs3yJvKrY6W4t4vTfcdIaFoOg/edit?usp=sharing
+```{r get data}
+df <- read_tsv('NFLData.tsv')
+```
+
+First, we will conduct some exploration and try to understand the dataset.
+Then, we will explore the relationship of points. We'll explore points scored,
+points allowed, and point differential versus wins. Obviously, for individual
+games, measurements like point differential are highly correlated with wins, but
+over the average course of a season we might see different results.
+
+Note: After the analysis, it makes more sense to plot winning percentage (wins + 0.5 * ties). Overall the graphs should still look the same.
+
+## Data analysis
+
+Let's first get a look of what's in our data!
+```{r first look}
+names(df)
+summary(df)
+head(df)
+```
+
+There are 32 teams in the NFL, and 19 years in this dataset. Let's create an aggregated dataset where we combine all of a teams stats.
+```{r combined dataset}
+combined_df <- df %>%
+  group_by(team) %>%
+  summarise(wins = sum(wins), losses = sum(losses), ties = sum(ties), 
+            scored = sum(forced), 
+            allowed = sum(allowed),
+            net = sum(net)) %>%
+  mutate(pct = (wins + 0.5 * ties) / (wins + losses + ties))
+print(combined_df)
+```
+Note: We chose to sum up all the data and then added a column for the win percentage across the 19 seasons.
+
+Alright, now it's time to do some very basic plotting. Let's just look at scored
+vs percentage in the original data.
+```{r scored vs wins original}
+ggplot(data=df, aes(x = forced, y = pct)) + geom_point() +
+  geom_smooth(formula = y ~ x, method = "lm", se = FALSE) +
+  labs(x = "Points Scored", y = "Win Percentage")
+```
+
+Very interesting. For the most part, of course we see a direct positive correlation. The more you score, the more you win, right? But what about the line on the left, which essentially has a bunch of super low scoring teams. Let's go ahead and split by year.
+```{r scored vs wins original by year}
+ggplot(data=df, aes(x = forced, y = pct, color=factor(year))) + geom_point() +
+  labs(x = "Points Scored", y = "Win Percentage")
+```
+
+Okay, the colors are confusing. Let's plot from 2016 onward to see if we can
+notice anything interesting.
+```{r data from 2018+}
+df_2016_plus <- subset(df, df$year >= 2016)
+ggplot(data=df_2016_plus, aes(x = forced, y = pct, color=factor(year))) + geom_point() +
+  labs(x = "Points Scored", y = "Win Percentage") +
+  guides(col = guide_legend("Year"))
+```
+
+Now let's go ahead and plot points forced, allowed, and net vs win percentage for our data.
+```{r general plots}
+ggplot(data=df, aes(x=forced, y=pct)) + geom_point(color=factor(df$year)) +
+  geom_smooth(formula = y ~ x, method = "lm", se = FALSE) +
+  labs(x = "Points Scored", y = "Win Percentage")
+ggplot(data=df, aes(x=allowed, y=pct)) + geom_point(color=factor(df$year)) +
+  geom_smooth(formula = y ~ x, method = "lm", se = FALSE) +
+  labs(x = "Points Allowed", y = "Win Percentage")
+ggplot(data=df, aes(x=net, y=pct)) + geom_point(color=factor(df$year)) +
+  geom_smooth(formula = y ~ x, method = "lm", se = FALSE) +
+  labs(x = "Point Differential", y = "Win Percentage")
+```
+
+Honestly, just as expected. There is a strong correlation between scored points,
+allowed points, and an extremely strong correlation for net points. Let's calculate the correlation exactly.
+
+```{r correlations}
+print(cor(x=df$forced, y=df$pct))
+print(cor(x=df$allowed, y=df$pct))
+print(cor(x=df$net, y=df$pct))
+```
+
+Interestingly enough, defense is not as correlated.
+There's too many dots on these graphs, and labeling would be a visual nightmare.
+Let's switch over to the combined datasets. Let's look at the generic plots before
+answering/asking any questions.
+
+```{r combined general plots}
+ggplot(data=combined_df, aes(x=scored, y=pct, color = team)) + geom_point() +
+  guides(col = guide_legend("Team")) + 
+  theme(legend.text = element_text(size = 6))
+ggplot(data=combined_df, aes(x=allowed, y=pct, color = team)) + geom_point() +
+  guides(col = guide_legend("Team")) + 
+  theme(legend.text = element_text(size = 6))
+ggplot(data=combined_df, aes(x=net, y=pct, color = team)) + geom_point() +
+  guides(col = guide_legend("Team")) + 
+  theme(legend.text = element_text(size = 6))
+```
+
+Once again we see strong correlations. Let's also once again calculate the correlations exactly.
+```{r combined correlations}
+print(cor(x=combined_df$scored, y=combined_df$pct))
+print(cor(x=combined_df$allowed, y=combined_df$pct))
+print(cor(x=combined_df$net, y=combined_df$pct))
+```
+
+Even stronger correlations then before. It is again interesting to note that points
+allowed is quite weaker as a correlation.
+
+Finally, we want to see who wont the most and who lost the most.
+```{r win percent plot}
+ggplot(data=combined_df, aes(x=team, y=pct)) + geom_col() +
+  theme(axis.text.x = element_text(angle = 90, vjust=0.5, hjust=1)) +
+  labs(x="Team", y="Win Percentage")
+```
+
+## Conclusion
+
+The team with the highest win percentage across the 19 years of our dataset was the New England Patriots. This is not surprising at all as the Patriots have been considered the NFL's dynasty in the last 2 decades as they have won 6 Superbowls since 2001. Also, not surprisingly, they had the highest point differential. Their point differential was over 1000 points higher than the next team. 
+On the contrary, the Cleveland Browns had the lowest win percentage across the 19 years of our dataset. This is also not surprising as the Browns were mediocre at best in the NFL over the last 2 decades. The Browns, in 2017, become the 2nd team in NFL history to have a 0 win, 16 loss season (the other was the Detroit Lions in 2008). Shockingly though, the Browns did not have the worst point differential (they had the second worst). The Las Vegas Raiders beat out the Browns for worst Point Differential by over 100 points (and the had the 3rd lowest win percentage). 
+
+What did our analysis find? Overall, we got some very obvious results but it's nice to
+see the clear visualizations and a confirmation of our beliefs. The one major interesting
+insight that we found was that defense (points allowed) was not as indicative of winrate
+compared to offense (points scored). Offense was at around the middle, while net points
+was very strongly correlated with winning.
+
+In summary: scoring more points in a football game than the other team helps you win.
+
+## Session Info
+
+```{r session info}
+sessionInfo()
